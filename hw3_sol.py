@@ -72,25 +72,72 @@
 # статистика загрузки процессора из файла /proc/loadavg 
 # (можно писать просто всё содержимое этого файла)
 
-import pytest
-from checkers import checkout, getout
-import random, string
+
+
+# config.py
 import yaml
+
+
+def load_config():
+    with open('config.yaml') as f:
+        return yaml.safe_load(f)
+
+data = load_config()
+
+# file_operations.py
+import random
+import string
+from checkers import checkout
+
+
+def make_folders(data):
+    return checkout("mkdir {} {} {} {}".format(data["folder_in"], data["folder_in"], data["folder_ext"], data["folder_ext2"]), "")
+
+
+def clear_folders(data):
+    return checkout("rm -rf {}/* {}/* {}/* {}/*".format(data["folder_in"], data["folder_in"], data["folder_ext"], data["folder_ext2"]), "")
+
+
+def make_files(data):
+    list_of_files = []
+    for i in range(data["count"]):
+        filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        if checkout("cd {}; dd if=/dev/urandom of={} bs={} count=1 iflag=fullblock".format(data["folder_in"], filename, data["bs"]), ""):
+            list_of_files.append(filename)
+    return list_of_files
+
+# stat_operations.py
+from checkers import getout, checkout
 from datetime import datetime
 
 
+def get_load_average():
+    return getout("cat /proc/loadavg")
+
+
+def write_to_stat_file(data, stat):
+    checkout("echo 'time: {} count:{} size: {} load: {}'>> stat.txt".format(datetime.now().strftime("%H:%M:%S.%f"), data["count"], data["bs"], stat), "")
+
+# fixtures.py
+import pytest
+from datetime import datetime
+from config import data
+from file_operations import make_folders, clear_folders, make_files
+from stat_operations import get_load_average, write_to_stat_file
+
+
 @pytest.fixture()
-def append_stat_line():
-    def _append_stat_line():
-        stat = getout("cat /proc/loadavg")
-        with open('stat.txt', 'a') as stat_file:
-            stat_file.write("time: {} count: {} size: {} load: {}\n".format(
-                datetime.now().strftime("%H:%M:%S.%f"), data["count"], data["bs"], stat))
-    
-    yield _append_stat_line
+def make_folders_fixture():
+    return make_folders(data)
 
 
-def test_example(make_folders, clear_folders, make_files, make_subfolder, make_bad_arx, append_stat_line):
+@pytest.fixture()
+def clear_folders_fixture():
+    return clear_folders(data)
 
-    # вызов фикстуры
-    append_stat_line()
+# main_test_file.py
+import pytest
+from config import data
+from fixtures import make_folders_fixture, clear_folders_fixture, make_files_fixture, make_subfolder_fixture, print_time_fixture, make_bad_arx_fixture, stat_fixture
+
+
